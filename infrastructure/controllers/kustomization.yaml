@@ -44,3 +44,12 @@ helmCharts:
       crds:
         migration:
           enabled: false
+  - name: sealed-secrets
+    repo: https://bitnami.github.io/sealed-secrets
+    version: 2.22.0
+    releaseName: sealed-secrets
+    namespace: kube-system
+    includeCRDs: true
+    valuesInline:
+      # The controller name and namespace kubeseal looks for by default.
+      fullnameOverride: sealed-secrets-controller
