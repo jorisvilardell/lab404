@@ -29,6 +29,15 @@ spec:
         app.kubernetes.io/component: data
         app.kubernetes.io/part-of: lab404
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # valkey:valkey in the image; the custom command skips the entrypoint
+        # that would otherwise drop privileges itself.
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       nodeSelector:
         lab404.io/workload: stateful
       tolerations:
@@ -42,6 +51,22 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]
           args: ['exec valkey-server --requirepass "$VALKEY_PASSWORD"']
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 25m
+              memory: 16Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            # Working directory where Valkey writes its RDB snapshots.
+            - name: data
+              mountPath: /data
           env:
             - name: VALKEY_PASSWORD
               valueFrom:
@@ -51,6 +76,10 @@ spec:
           ports:
             - name: valkey
               containerPort: 6379
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service
