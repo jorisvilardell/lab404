@@ -5,8 +5,9 @@ resources:
 images:
   - name: ghcr.io/leofvo/lab404-web
     newName: ghcr.io/jorisvilardell/lab404-web
-    newTag: latest
+    # Signed index from images.yml@refs/heads/main, commit 2588ca1.
+    digest: sha256:5b52a36365f59a49d2780685c1095a35e7b2eaa7397dba7532b384c8a43edfe0
   - name: ghcr.io/leofvo/lab404-votes
     newName: ghcr.io/jorisvilardell/lab404-votes
-    newTag: latest
-
+    # Signed index from images.yml@refs/heads/main, commit 2588ca1.
+    digest: sha256:5cf22ff4a1acb2f625421b5d20437b026d6863e3ea4dfa7faee2b9d45116cd46
