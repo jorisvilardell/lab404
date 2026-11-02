@@ -263,6 +263,8 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/evidence"
           docker buildx imagetools inspect "${image}:sha-${SHA}" \
             | tee "$GITHUB_WORKSPACE/evidence/${SERVICE}.index.txt"
+          docker buildx imagetools inspect "${image}:sha-${SHA}" --format '{{json .Manifest}}' \
+            | jq -r .digest > "$GITHUB_WORKSPACE/evidence/${SERVICE}.index-digest.txt"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -270,9 +272,71 @@ jobs:
           path: evidence/
           if-no-files-found: error
 
+  sign:
+    name: Sign ${{ matrix.service }} index
+    needs: merge
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      packages: write
+      id-token: write
+    strategy:
+      matrix:
+        service: [web, votes]
+
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: evidence-index-${{ matrix.service }}
+          path: /tmp/index
+
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+        with:
+          # This job does not check out the repository; keep in sync with cosign in mise.toml.
+          mise_toml: |
+            [tools]
+            cosign = "3.1.4"
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign the index and its platform manifests
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ matrix.service }}
+        run: |
+          repo="ghcr.io/${OWNER,,}/lab404-${SERVICE}"
+          cosign sign --yes --recursive "${repo}@$(cat "/tmp/index/${SERVICE}.index-digest.txt")"
+
+      - name: Verify the index and its platform manifests
+        env:
+          OWNER: ${{ github.repository_owner }}
+          SERVICE: ${{ matrix.service }}
+          IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          repo="ghcr.io/${OWNER,,}/lab404-${SERVICE}"
+          index="$(cat "/tmp/index/${SERVICE}.index-digest.txt")"
+          children="$(docker buildx imagetools inspect --raw "${repo}@${index}" | jq -r '.manifests[].digest')"
+          mkdir -p evidence
+          for digest in "$index" $children; do
+            cosign verify \
+              --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "${repo}@${digest}" > "evidence/${SERVICE}-${digest#sha256:}.cosign.json"
+          done
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evidence-cosign-${{ matrix.service }}
+          path: evidence/
+          if-no-files-found: error
+
   evidence:
     name: Collect security evidence
-    needs: merge
+    needs: sign
     runs-on: ubuntu-latest
     permissions: {}
 
